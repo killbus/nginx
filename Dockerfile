@@ -1,4 +1,8 @@
 ARG BASE_IMAGE_TAG
+ARG NGINX_VER
+ARG NGX_WAF_VER=current
+
+FROM declare/ngx_waf-prebuild:ngx-${NGINX_VER}-module-${NGX_WAF_VER}-musl AS ngx_waf_prebuild
 
 FROM wodby/alpine:${BASE_IMAGE_TAG}
 
@@ -11,6 +15,9 @@ ENV NGINX_VER="${NGINX_VER}" \
     APP_ROOT="/var/www/html" \
     FILES_DIR="/mnt/files" \
     NGINX_VHOST_PRESET="html"
+
+COPY --from=ngx_waf_prebuild /modules/ngx_http_waf_module.so /usr/lib/nginx/modules/ngx_http_waf_module.so
+COPY --from=ngx_waf_prebuild /assets /usr/local/src/ngx_waf/assets
 
 RUN set -ex; \
     \
@@ -59,6 +66,7 @@ RUN set -ex; \
         autoconf \
         automake \
         bison \
+        curl-dev \
         curl \
         flex \
         g++ \
@@ -67,6 +75,7 @@ RUN set -ex; \
         libstdc++ \
         libtool \
         libxml2-dev \
+        lua-dev \
         pcre-dev \
         rsync \
         sed \
@@ -197,7 +206,7 @@ RUN set -ex; \
     for i in /usr/lib/nginx/modules/*.so; do ln -s "${i}" /usr/share/nginx/modules/; done; \
     \
 	runDeps="$( \
-		scanelf --needed --nobanner --format '%n#p' /usr/sbin/nginx /usr/local/modsecurity/lib/*.so /usr/lib/nginx/modules/*.so /tmp/envsubst \
+		scanelf --needed --nobanner --format '%n#p' /usr/sbin/nginx /usr/local/modsecurity/lib/*.so /usr/local/lib/libmodsecurity.so* /usr/lib/nginx/modules/*.so /tmp/envsubst \
 			| tr ',' '\n' \
 			| sort -u \
 			| awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
@@ -230,6 +239,7 @@ COPY docker-entrypoint.sh /
 
 WORKDIR $APP_ROOT
 EXPOSE 80
+VOLUME [ "/usr/local/src/ngx_waf/assets" ]
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["sudo", "nginx"]

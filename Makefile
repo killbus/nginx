@@ -24,7 +24,7 @@ else
 endif
 
 REGISTRY ?= docker.io
-REPO = $(REGISTRY)/wodby/nginx
+REPO = $(REGISTRY)/declare/nginx
 NAME = nginx-$(NGINX_MINOR_VER)
 
 ifneq ($(STABILITY_TAG),)

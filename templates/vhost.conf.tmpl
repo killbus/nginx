@@ -9,6 +9,11 @@ server {
     modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
     {{- end }}
 
+    {{- if getenv "NGINX_WAF_ENABLED" }}
+    waf {{ getenv "NGINX_WAF_ENABLED" "on" }};
+    waf_rule_path {{ getenv "NGINX_WAF_RULE_PATH" "/usr/local/src/ngx_waf/assets/rules/" }};
+    {{- end }}
+
     root {{ getenv "NGINX_SERVER_ROOT" "/var/www/html" }};
 
     {{- if getenv "NGINX_VHOST_PRESET" }}

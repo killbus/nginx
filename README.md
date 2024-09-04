@@ -9,6 +9,7 @@
 - [Build arguments](#build-arguments)
 - [Nginx modules](#nginx-modules)
     - [ModSecurity]
+    - [WAF]
 - [Default behaviour](#default-behavior)
 - [Customization](#customization)
 - [Virtual hosts presets](#virtual-hosts-presets)
@@ -139,6 +140,10 @@ All images built for `linux/amd64` and `linux/arm64`
 | `NGINX_USER`                                         | `nginx`                       |                                     |
 | `NGINX_VHOST_NO_DEFAULTS`                            |                               |                                     |
 | `NGINX_VHOST_PRESET`                                 | `html`                        |                                     |
+| `NGINX_WAF_ENABLED`                                  |                               | See [WAF]                           |
+| `NGINX_WAF_RULE_PATH`                                | `/usr/local/src/ngx_waf/assets/rules/`|                             |
+| `NGINX_WAF_ZONES`                                    |                               | json array as string                |
+| `NGINX_WAF_CAPTCHA_VERIFY_LOG`                       | `off`                         |                                     |
 | `NGINX_WORKER_CONNECTIONS`                           | `1024`                        |                                     |
 | `NGINX_WORKER_PROCESSES`                             | `auto`                        |                                     |
 | `NGINX_WP_FILE_PROXY_URL`                            |                               | e.g. `http://dev.example.com`       |
@@ -203,6 +208,57 @@ Additionally, you can enable [OWASP Core Rule Set (CRS)](https://modsecurity.org
 setting `$NGINX_MODSECURITY_USE_OWASP_CRS` to any value, ️be wary since it
 may [block some requests](https://github.com/wodby/nginx/pull/14#issuecomment-447404035) with the default configuration.
 See env vars starting with `$NGINX_MODSECURITY_` for advanced configuration.
+
+
+### WAF
+
+Included as a dynamic module, disabled by default. Check more details on https://github.com/ADD-SP/ngx_waf.
+`NGINX_SET_REAL_IP_FROM` should be set correctly to get the right client data while `$NGINX_WAF_ENABLED` is set to enabled.
+
+Example custom `preset` for `waf` with captcha enabled, implements the default `html` preset:
+
+```
+{{ $static := (getenv "NGINX_STATIC_EXT_REGEX" "css|cur|js|jpe?g|gif|htc|ico|png|xml|otf|ttf|eot|woff|woff2|svg|mp4|svgz|ogg|ogv|pdf|pptx?|zip|tgz|gz|rar|bz2|doc|xls|exe|tar|mid|midi|wav|bmp|rtf|txt|map|webp") }}
+{{ $index := (getenv "NGINX_INDEX_FILE" "index.html") }}
+
+location / {
+    location ~* ^.+\.(?:{{ $static }})$ {
+        access_log {{ getenv "NGINX_STATIC_ACCESS_LOG" "off" }};
+        tcp_nodelay {{ getenv "NGINX_STATIC_TCP_NODELAY" "off" }};
+        expires {{ getenv "NGINX_STATIC_EXPIRES" "1y" }};
+
+        add_header Pragma "cache";
+        add_header Cache-Control "public";
+
+        open_file_cache {{ getenv "NGINX_STATIC_OPEN_FILE_CACHE" "max=1000 inactive=30s" }};
+        open_file_cache_valid {{ getenv "NGINX_STATIC_OPEN_FILE_CACHE_VALID" "30s" }};
+        open_file_cache_min_uses {{ getenv "NGINX_STATIC_OPEN_FILE_CACHE_MIN_USES" "2" }};
+        open_file_cache_errors {{ getenv "NGINX_STATIC_OPEN_FILE_CACHE_ERRORS" "off" }};
+    }
+
+    location = /captcha {
+        allow all;
+        log_not_found off;
+        access_log {{ getenv "NGINX_WAF_CAPTCHA_VERIFY_LOG" "off" }};
+    }
+
+    index {{ $index }};
+
+    waf_mode STD;
+
+    waf_cc_deny on rate=500r/m duration=60m zone=waf:cc;
+    waf_captcha off prov=reCAPTCHAv2:checkbox secret=xxx sitekey=xxx max_fails=20:5m zone=waf:captcha;
+
+    waf_cache on capacity=50;
+
+    waf_verify_bot on;
+
+    waf_action blacklist=403 cc_deny=CAPTCHA modsecurity=follow verify_bot=403 zone=waf:action;
+
+    try_files $uri $uri/ =404;
+
+}
+```
 
 ## Default behavior
 
@@ -460,6 +516,8 @@ default params values:
 [stream_ssl_preread]: http://nginx.org/en/docs/stream/ngx_stream_ssl_preread_module.html
 
 [vts]: https://github.com/vozlt/nginx-module-vts
+
+[WAF]: #waf
 
 [9aec15e]: https://github.com/google/ngx_brotli/commit/9aec15e2aa6feea2113119ba06460af70ab3ea62
 [3c6cf41]: https://github.com/vozlt/nginx-module-vts/commit/3c6cf41315bfcb48c35a3a0be81ddba6d0d01dac
